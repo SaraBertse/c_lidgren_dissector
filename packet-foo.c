@@ -11,9 +11,11 @@
 
 
 
-#define FOO_PORT 14242
+//#define FOO_PORT 14249//14242
 
-#define FRAME_HEADER_LEN 5
+//#define OPTIONAL TRUE
+#define FRAME_HEADER_LEN 10
+#define IP_PROTO_foo 254
 
 static int proto_foo = -1;
 static int hf_foo_function_code = -1;
@@ -30,7 +32,7 @@ conversation_t *conversation;
 
 const value_string lidgren_func_vals[] = {
     {0, "Unconnected"},
-    {1,  "userUnreliable"},
+    {1, "userUnreliable"},
     {2, "UserSequenced1"},
     {3, "UserSequenced1"},
     {4, "UserSequenced1"},
@@ -174,8 +176,8 @@ const value_string lidgren_func_vals[] = {
     { 128,  "LibraryError"},
     { 129, "Ping"},
     { 130, "Pong"},
-    {  131,  "Connect"},
-    {  132, "ConnectResponse"},
+    { 131,  "Connect"},
+    { 132, "ConnectResponse"},
     {    133,  "ConnectionEstablished"},
     { 134,  "Acknowledge"},
     {    135,  "Disconnect"},
@@ -274,17 +276,19 @@ proto_register_foo(void)
     proto_register_subtree_array(ett, array_length(ett));
 }
 
-static guint
-get_foo_len1(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
-{
-    return (guint)tvb_get_ntohl(tvb, 5);
-}
-
 static gboolean
 test_foo(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _U_)
 {
+    if ( tvb_get_guint8(tvb, offset) != 0x83 )
+        return FALSE;
+    
+    if ( tvb_get_guint8(tvb, offset+1) != 0x00 )
+        return FALSE;
 
-    /* Assume it's your packet ... */
+    if ( tvb_get_guint8(tvb, offset+2) != 0x00 )
+        return FALSE;
+    
+    /* Assume it's your packet */
     return TRUE;
 }
 
@@ -322,13 +326,17 @@ dissect_foo_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     return tvb_reported_length(tvb);
 }
 
-
+static guint
+get_foo_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
+{
+    return (guint)tvb_get_ntohl(tvb, offset+5);
+}
 
 static int
 dissect_foo_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    udp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN,
-                     get_foo_len1, dissect_foo_pdu, data);
+    udp_dissect_pdus(tvb, pinfo, tree, FRAME_HEADER_LEN, test_foo,
+                     get_foo_len, dissect_foo_pdu, data);
     return tvb_reported_length(tvb);
 }
 
@@ -347,30 +355,33 @@ dissect_foo_heur_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     conversation = find_or_create_conversation(pinfo);
     conversation_set_dissector(conversation, foo_udp_handle);
 
-
-    return (udp_dissect_pdus(tvb, pinfo, tree, TRUE, FRAME_HEADER_LEN,
-                     get_foo_len1, dissect_foo_pdu, data) != 0);
+    return (udp_dissect_pdus(tvb, pinfo, tree, FRAME_HEADER_LEN, test_foo,
+                     get_foo_len, dissect_foo_pdu, data) != 0);
 }
-
-
-
 
 void
 proto_reg_handoff_foo(void)
 {
-    static dissector_handle_t foo_handle;
-
-    foo_handle = create_dissector_handle(dissect_foo, proto_foo);
-    //Koden på raden nedan ska kanske kommenteras bort?
-    dissector_add_uint("udp.port", FOO_PORT, foo_handle);
-
-
+    //static dissector_handle_t foo_handle;
+    //foo_handle = create_dissector_handle(dissect_foo, proto_foo);
+    
+    //Koden pa raden nedan ska kanske kommenteras bort?
+    //dissector_add_uint("udp.port", FOO_PORT, foo_handle);
 
     //New code
+    foo_udp_handle = create_dissector_handle(dissect_foo_udp,
+                                                         proto_foo);
+
     foo_pdu_handle = create_dissector_handle(dissect_foo_pdu,
                                                          proto_foo);
 
     //New code
     heur_dissector_add("udp", dissect_foo_heur_udp, "Lidgren over UDP",
-                       "Lidgren_udp", proto_foo, HEURISTIC_ENABLE);
+                       "lidgren_udp", proto_foo, HEURISTIC_ENABLE);
+        
+//#ifdef OPTIONAL
+    /* It's possible to write a dissector to be a dual heuristic/normal dissector */
+    /*  by also registering the dissector "normally".                             */
+    dissector_add_uint("udp", IP_PROTO_foo, foo_pdu_handle);
+//#endif
 }
