@@ -173,22 +173,23 @@ const value_string lidgren_func_vals[] = {
     {126, "Unused1"},
     {127, "Unused1"},
 
-    { 128,  "LibraryError"},
-    { 129, "Ping"},
-    { 130, "Pong"},
-    { 131,  "Connect"},
-    { 132, "ConnectResponse"},
-    {    133,  "ConnectionEstablished"},
-    { 134,  "Acknowledge"},
-    {    135,  "Disconnect"},
-    {    136, "Discovery"},
-    {    137,  "DiscoveryResponse"},
-    { 138,  "NatPunchMessage"},
-    { 139, "NatIntroductio"},
-    {   142,  "NatIntroductionConfirmRequest"},
-    {    143,  "NatIntroductionConfirmed"},
-    {    140,  "ExpantMTURequest"},
-    {   141,  "ExpandMTUSuccess"},
+    {128,  "LibraryError"},
+    {129, "Ping"},
+    {130, "Pong"},
+    {131,  "Connect"},
+    {132, "ConnectResponse"},
+    {133,  "ConnectionEstablished"},
+    {134,  "Acknowledge"},
+    {135,  "Disconnect"},
+    {136, "Discovery"},
+    {137,  "DiscoveryResponse"},
+    {138,  "NatPunchMessage"},
+    {139, "NatIntroductio"},
+    {142,  "NatIntroductionConfirmRequest"},
+    {143,  "NatIntroductionConfirmed"},
+    {140,  "ExpantMTURequest"},
+    {141,  "ExpandMTUSuccess"},
+    
     {0, NULL}
 };
 
@@ -274,6 +275,8 @@ proto_register_foo(void)
 
     proto_register_field_array(proto_foo, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
+
+    foo_udp_handle = register_dissector("lidgren", dissect_foo, proto_foo);
 }
 
 static gboolean
@@ -355,6 +358,8 @@ dissect_foo_heur_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     conversation = find_or_create_conversation(pinfo);
     conversation_set_dissector(conversation, foo_udp_handle);
 
+    //dissect_foo(tvb, pinfo, tree, data);
+    //return TRUE;
     return (udp_dissect_pdus(tvb, pinfo, tree, FRAME_HEADER_LEN, test_foo,
                      get_foo_len, dissect_foo_pdu, data) != 0);
 }
@@ -369,11 +374,9 @@ proto_reg_handoff_foo(void)
     //dissector_add_uint("udp.port", FOO_PORT, foo_handle);
 
     //New code
-    foo_udp_handle = create_dissector_handle(dissect_foo_udp,
-                                                         proto_foo);
+    //foo_udp_handle = create_dissector_handle(dissect_foo_udp, proto_foo);
 
-    foo_pdu_handle = create_dissector_handle(dissect_foo_pdu,
-                                                         proto_foo);
+    foo_pdu_handle = create_dissector_handle(dissect_foo_pdu, proto_foo);
 
     //New code
     heur_dissector_add("udp", dissect_foo_heur_udp, "Lidgren over UDP",
