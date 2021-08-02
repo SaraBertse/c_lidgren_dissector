@@ -12,9 +12,6 @@
 
 #define lidgren_PORT 14242
 
-#define FRAME_HEADER_LEN 5
-#define IP_PROTO_lidgren 254
-
 static int proto_lidgren = -1;
 static int hf_lidgren_function_code = -1;
 static int hf_lidgren_sequence = -1;
@@ -23,11 +20,7 @@ static int hf_lidgren_payload_length = -1;
 static int hf_lidgren_payload_field = -1;
 static gint ett_lidgren = -1;
 static gint ett_hdr_lidgren = -1;
-static dissector_handle_t lidgren_pdu_handle;
-static dissector_handle_t lidgren_udp_handle;
-static dissector_handle_t lidgren_tcp_handle;
 static dissector_handle_t lidgren_handle;
-conversation_t *conversation;
 
 
 const value_string lidgren_func_vals[] = {
