@@ -1,14 +1,4 @@
-#include "config.h"
-#include <epan/packet.h>
-#include <epan/prefs.h>
-#include <epan/strutil.h>
-#include <epan/to_str.h>
-#include <epan/expert.h>
-
-#include <epan/dissectors/packet-rdm.h>
-#include <epan/dissectors/packet-tcp.h>
 #include <epan/dissectors/packet-udp.h>
-
 
 #define lidgren_PORT 14242
 
@@ -219,7 +209,7 @@ dissect_lidgren(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     return tvb_captured_length(tvb);
 }
 
-
+//Registers the dissector and defines the header fields
 void
 proto_register_lidgren(void)
 {
@@ -257,12 +247,13 @@ proto_register_lidgren(void)
 
     };
     
-    /* Setup protocol subtree array */
+    //Sets up the protocol subtree array
     static gint *ett[] = {
         &ett_lidgren,
         &ett_hdr_lidgren
     };
 
+    //Defines protocol names
     proto_lidgren = proto_register_protocol (
         "Lidgren Protocol", /* name        */
         "Lidgren",          /* short name  */
@@ -273,12 +264,11 @@ proto_register_lidgren(void)
     proto_register_subtree_array(ett, array_length(ett));
 }
 
+//Sets the dissector handles so that Wireshark can find them
 void
 proto_reg_handoff_lidgren(void)
 {
-    //static dissector_handle_t lidgren_handle;
     lidgren_handle = create_dissector_handle(dissect_lidgren, proto_lidgren);
     
-    //Koden pa raden nedan ska kanske kommenteras bort?
     dissector_add_uint("udp.port", lidgren_PORT, lidgren_handle);
 }
