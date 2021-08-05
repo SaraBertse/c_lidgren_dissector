@@ -1,15 +1,4 @@
-#include "config.h"
-#include <epan/packet.h>
-#include <epan/prefs.h>
-#include <epan/strutil.h>
-#include <epan/to_str.h>
-#include <epan/expert.h>
-
-#include <epan/dissectors/packet-rdm.h>
-#include <epan/dissectors/packet-tcp.h>
-#include <epan/dissectors/packet-udp.h>
-
-
+#include <epan/dissectors/packet-udp.h> //This "carries" the program
 
 #define FRAME_HEADER_LEN 5
 #define IP_PROTO_lidgren 254
@@ -65,6 +54,7 @@ const value_string lidgren_func_vals[] = {
     {33, "UserSequenced32"},
 
     {34, "UserRealiableUnordered"},
+
     {35, "UserRealiableSequenced1"},
     {36, "UserRealiableSequenced2"},
     {37, "UserRealiableSequenced3"},
@@ -182,18 +172,17 @@ const value_string lidgren_func_vals[] = {
 };
 
 
-//The main dissecting function
+//The main dissecting function for the non-heuristic part of the dissector
 static int
 dissect_lidgren(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    
     guint8 func_code;
     guint16 length;
     gint offset = 0;
     proto_tree *lidgren_hdr_tree, *lidgren_tree;
     length = tvb_get_letohs(tvb, offset+3);
-
     func_code = tvb_get_guint8(tvb, offset);
+    
     if (try_val_to_str(func_code, lidgren_func_vals) == NULL)
         return 0;
 
@@ -210,10 +199,10 @@ dissect_lidgren(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     //Creates Lidgren "Header" subtree
     lidgren_hdr_tree = proto_tree_add_subtree(lidgren_tree, tvb, 0, 4, ett_hdr_lidgren, NULL, "Header");
 
+    //Adds fields to the "Header" subtree
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_function_code, tvb, 0, 1, ENC_BIG_ENDIAN);
     offset += 1;
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_sequence, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_fragment_flag, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_payload_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
@@ -225,7 +214,7 @@ dissect_lidgren(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     return tvb_captured_length(tvb);
 }
 
-
+//Registers the dissector and defines the header fields
 void
 proto_register_lidgren(void)
 {
@@ -249,7 +238,7 @@ proto_register_lidgren(void)
             NULL, HFILL }
         },
         { &hf_lidgren_payload_length,
-            { "Payload Length", "lidgren.payloadlen",
+            { "Payload Length (in bits)", "lidgren.payloadlen",
             FT_UINT16, BASE_DEC_HEX,
             NULL, 0x0,
             NULL, HFILL }
@@ -260,16 +249,15 @@ proto_register_lidgren(void)
             NULL, 0x0,
             NULL, HFILL }
         },
-
     };
-    
 
-    /* Setup protocol subtree array */
+    //Sets up the protocol subtree array
     static gint *ett[] = {
         &ett_lidgren,
         &ett_hdr_lidgren
     };
 
+    //Defines protocol names
     proto_lidgren = proto_register_protocol (
         "Lidgren Protocol", /* name        */
         "Lidgren",          /* short name  */
@@ -282,6 +270,7 @@ proto_register_lidgren(void)
     lidgren_udp_handle = register_dissector("lidgren", dissect_lidgren, proto_lidgren);
 }
 
+//Checks whether the packet is Lidgren. Returns TRUE if the packet is Lidgren
 static gboolean
 test_lidgren(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _U_)
 {
@@ -293,51 +282,60 @@ test_lidgren(packet_info *pinfo _U_, tvbuff_t *tvb, int offset _U_, void *data _
 
     if ( tvb_get_guint8(tvb, offset+2) != 0x00 )
         return FALSE;
-    
-    /* Assume it's your packet */
+
     return TRUE;
 }
 
+//The dissector for the heuristic part of the dissector
 static int
 dissect_lidgren_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     guint8 func_code;
+    guint16 length;
     gint offset = 0;
     proto_tree *lidgren_hdr_tree, *lidgren_tree;
-
+    length = tvb_get_letohs(tvb, offset+3);
     func_code = tvb_get_guint8(tvb, offset);
+
     if (try_val_to_str(func_code, lidgren_func_vals) == NULL)
         return 0;
 
+    //Updates/sets the Wireshark columns "Protocol" and "Info" 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Lidgren");
-    /* Clear out stuff in the info column */
     col_clear(pinfo->cinfo,COL_INFO);
     col_add_str(pinfo->cinfo,COL_INFO, val_to_str(func_code, lidgren_func_vals, "Unknown function (%d)"));
 
     proto_item *ti = proto_tree_add_item(tree, proto_lidgren, tvb, 0, -1, ENC_NA);
+
+    //Creates Lidgren tree
     lidgren_tree = proto_item_add_subtree(ti, ett_lidgren);
 
-    /* Create header subtree */
+    //Creates Lidgren "Header" subtree
     lidgren_hdr_tree = proto_tree_add_subtree(lidgren_tree, tvb, 0, 4, ett_hdr_lidgren, NULL, "Header");
 
+    //Adds fields to the "Header" subtree
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_function_code, tvb, 0, 1, ENC_BIG_ENDIAN);
     offset += 1;
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_sequence, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_fragment_flag, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
     proto_tree_add_item(lidgren_hdr_tree, hf_lidgren_payload_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
-    return tvb_reported_length(tvb);
+    //Adds the "Payload" field to the Lidgren tree
+    proto_tree_add_item(lidgren_tree, hf_lidgren_payload_field, tvb, offset, (length/8), ENC_BIG_ENDIAN);
+
+    return tvb_captured_length(tvb);
 }
 
+//Returns the value of the length flag for the packet
 static guint
 get_lidgren_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
     return tvb_get_letohs(tvb, offset+3);
 }
 
+//Returns the length of the packet
 static int
 dissect_lidgren_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -346,48 +344,31 @@ dissect_lidgren_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
     return tvb_reported_length(tvb);
 }
 
+//Returns TRUE if packet is Lidgren, otherwise FALSE
 static gboolean
 dissect_lidgren_heur_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
     if (!test_lidgren(pinfo, tvb, 0, data))
         return FALSE;
 
-    /* specify that dissect_PROTOABBREV is to be called directly from now on for
-     * packets for this "connection" ... but only do this if your heuristic sits directly
-     * on top of (was called by) a dissector which established a conversation for the
-     * protocol "port type". In other words: only directly over TCP, UDP, DCCP, ...
-     * otherwise you'll be overriding the dissector that called your heuristic dissector.
-     */
+    /*If the protocol is Lidgren, the non-heuristic part of the Lidgren dissector (dissect_lidgren) 
+      should keep dissecting as long as it's within the same conversation */ 
     conversation = find_or_create_conversation(pinfo);
     conversation_set_dissector(conversation, lidgren_udp_handle);
 
-    //dissect_lidgren(tvb, pinfo, tree, data);
-    //return TRUE;
     return (udp_dissect_pdus(tvb, pinfo, tree, FRAME_HEADER_LEN, test_lidgren,
                      get_lidgren_len, dissect_lidgren_pdu, data) != 0);
 }
 
+//Sets the dissector handles so that Wireshark can find them
 void
 proto_reg_handoff_lidgren(void)
 {
-    //static dissector_handle_t lidgren_handle;
-    //lidgren_handle = create_dissector_handle(dissect_lidgren, proto_lidgren);
-    
-    //Koden pa raden nedan ska kanske kommenteras bort?
-    //dissector_add_uint("udp.port", lidgren_PORT, lidgren_handle);
-
-    //New code
-    //lidgren_udp_handle = create_dissector_handle(dissect_lidgren_udp, proto_lidgren);
-
     lidgren_pdu_handle = create_dissector_handle(dissect_lidgren_pdu, proto_lidgren);
 
-    //New code
     heur_dissector_add("udp", dissect_lidgren_heur_udp, "Lidgren over UDP",
                        "lidgren_udp", proto_lidgren, HEURISTIC_ENABLE);
         
-//#ifdef OPTIONAL
-    /* It's possible to write a dissector to be a dual heuristic/normal dissector */
-    /*  by also registering the dissector "normally".                             */
+    //Registers the non-heuristic dissector to use it with conversations
     dissector_add_uint("udp", IP_PROTO_lidgren, lidgren_pdu_handle);
-//#endif
 }
